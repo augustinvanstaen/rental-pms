@@ -8,6 +8,20 @@ Single property. The notification emails are in Dutch.
 Guest names, reservation numbers and account identifiers in the tests and docs
 are anonymised — this repo is public. Don't commit real reservation data.
 
+**Nor log it.** Actions logs on a public repo are world-readable, so the default
+run output is aggregate counts only:
+
+```
+7 notification(s): 1 cancelled, 2 modified, 4 new.
+0 with a departure date, 1 with a guest name.
+```
+
+The per-reservation table needs `--details`, and every log line naming a
+reservation or guest is at DEBUG, below the default level. The workflow passes
+neither `--details` nor `--verbose`. `tests/test_report_privacy.py` asserts all
+of this, because it was got wrong once already: the first Actions run published
+real guest names to a public log.
+
 ## Status
 
 | Step | Module | State |

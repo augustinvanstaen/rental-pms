@@ -283,7 +283,7 @@ class NotionWriter:
             "%s %s: %s", action, state.reservation_number, ", ".join(sorted(changes))
         )
         if self._dry_run:
-            logger.info(
+            logger.debug(
                 "[dry-run] would have %s %s: %s",
                 action, state.reservation_number, ", ".join(sorted(changes)),
             )
@@ -313,7 +313,9 @@ class NotionWriter:
         for state in states:
             outcome = self.upsert(state)
             counts[outcome] += 1
-            logger.info(
+            # Reservation numbers are personal data and CI logs here are public,
+            # so per-page detail is debug-only. The totals below are safe.
+            logger.debug(
                 "%s %s (%s, arrival %s)",
                 outcome, state.reservation_number, state.status, state.arrival,
             )

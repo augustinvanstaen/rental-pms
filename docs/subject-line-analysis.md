@@ -319,3 +319,31 @@ repeat run reports 0 created, 0 updated, 57 unchanged.
 Worth remembering as a general shape: anything used as a change-detection key
 has to be normalised on the way in, or the first system that normalises it
 differently turns every run into a write.
+
+
+## Public CI logs are an output channel too
+
+Anonymising the fixtures was not enough. The first GitHub Actions run printed
+the per-reservation table at default verbosity:
+
+```
+6100000003    cancelled   2026-08-14    -    Élodie Devriendt
+```
+
+With real values, on a public repository, where Actions logs are world-readable
+and retained. Every scheduled run would have republished the live booking data
+that the fixture anonymisation had just removed.
+
+The run was deleted and the output inverted: aggregate counts by default,
+per-reservation detail only behind `--details`, and every log line naming a
+reservation or a guest demoted to DEBUG. The workflow passes neither `--details`
+nor `--verbose`, so the dangerous output has to be opted into and cannot be
+reached by the scheduled job at all.
+
+`tests/test_report_privacy.py` asserts that the default report contains neither
+guest names nor reservation numbers, and that INFO-level logging from the iCal
+matcher and the Notion writer stays clear of both.
+
+The general lesson: when a repository goes public, the fixtures are the obvious
+place to look and the logs are the easy one to miss. Anything a scheduled job
+prints is published.

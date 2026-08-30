@@ -251,7 +251,8 @@ class IcalMatcher:
             if result.status == MATCH_EXACT:
                 enriched.append(replace(event, departure_date=result.departure))
             else:
-                logger.info(
+                # Carries a reservation number and an arrival date, so debug only.
+                logger.debug(
                     "no departure date for %s (arrival %s): %s",
                     event.reservation_number, event.arrival_date, result.note,
                 )

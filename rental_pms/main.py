@@ -47,6 +47,7 @@ def collect_events(config) -> List[ReservationEvent]:
     """Read the mailbox and return every notification we could parse."""
     events = []
     skipped = 0
+    weekday_mismatches = 0
 
     with ImapClient(
         host=config.imap_host,
@@ -69,33 +70,60 @@ def collect_events(config) -> List[ReservationEvent]:
                 continue
 
             if not event.weekday_matches:
-                logger.warning(
+                # The subject contains a reservation number, so keep it out of
+                # default-level logs; the count is reported in aggregate below.
+                logger.debug(
                     "weekday in subject disagrees with parsed date: %r", event.subject
                 )
+                weekday_mismatches += 1
             events.append(event)
 
     logger.info("parsed %d notifications (%d other messages skipped)", len(events), skipped)
+    if weekday_mismatches:
+        logger.warning(
+            "%d subject(s) had a weekday disagreeing with the parsed date; "
+            "re-run with --verbose to see which",
+            weekday_mismatches,
+        )
     return events
 
 
-def report(events: List[ReservationEvent]) -> None:
+def report(events: List[ReservationEvent], detailed: bool = False) -> None:
+    """Summarise a run.
+
+    Guest names and reservation numbers are personal data, and this project's
+    CI logs are public, so the per-reservation table is opt-in via --details.
+    The default output is aggregate counts only, which are safe anywhere.
+    """
     if not events:
         print("No Booking.com notifications found in the lookback window.")
         return
 
-    header = "{:<12}  {:<10}  {:<12}  {:<12}  {}"
-    print(header.format("RESERVATION", "EVENT", "ARRIVAL", "DEPARTURE", "GUEST"))
-    for event in sorted(events, key=lambda e: (e.arrival_date, e.reservation_number)):
-        print(header.format(
-            event.reservation_number,
-            event.event_type.value,
-            event.arrival_date.isoformat(),
-            event.departure_date.isoformat() if event.departure_date else "-",
-            event.guest_name or "-",
-        ))
-    with_departure = sum(1 for e in events if e.departure_date)
-    print("\n{} notification(s), {} with a departure date.".format(
-        len(events), with_departure))
+    if detailed:
+        header = "{:<12}  {:<10}  {:<12}  {:<12}  {}"
+        print(header.format("RESERVATION", "EVENT", "ARRIVAL", "DEPARTURE", "GUEST"))
+        for event in sorted(events, key=lambda e: (e.arrival_date, e.reservation_number)):
+            print(header.format(
+                event.reservation_number,
+                event.event_type.value,
+                event.arrival_date.isoformat(),
+                event.departure_date.isoformat() if event.departure_date else "-",
+                event.guest_name or "-",
+            ))
+        print("")
+
+    by_type = {}
+    for event in events:
+        by_type[event.event_type.value] = by_type.get(event.event_type.value, 0) + 1
+    breakdown = ", ".join("{} {}".format(by_type[k], k) for k in sorted(by_type))
+
+    print("{} notification(s): {}.".format(len(events), breakdown))
+    print("{} with a departure date, {} with a guest name.".format(
+        sum(1 for e in events if e.departure_date),
+        sum(1 for e in events if e.guest_name),
+    ))
+    if not detailed:
+        print("Re-run with --details to list them (prints personal data).")
 
 
 def audit(config) -> int:
@@ -154,6 +182,12 @@ def main(argv=None) -> int:
         help="read and parse emails, then print them. No iCal, no Notion writes.",
     )
     parser.add_argument(
+        "--details",
+        action="store_true",
+        help="list each reservation. Prints guest names and reservation numbers, "
+             "so avoid it anywhere logs are public.",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="do everything except write to Notion; report what would change.",
@@ -161,7 +195,9 @@ def main(argv=None) -> int:
     parser.add_argument(
         "--audit-labels",
         action="store_true",
-        help="report notification emails that no Gmail label covers, then exit.",
+        help="report notification emails that no Gmail label covers, then exit. "
+             "Prints subject lines, which contain reservation numbers, so treat "
+             "the output as personal data.",
     )
     parser.add_argument("--lookback-days", type=int, default=None)
     parser.add_argument("--verbose", "-v", action="store_true")
@@ -194,7 +230,7 @@ def main(argv=None) -> int:
         # guessed at.
         events = IcalMatcher(config.ical_url).enrich(events)
 
-    report(events)
+    report(events, detailed=args.details)
 
     if args.parse_only:
         return 0
