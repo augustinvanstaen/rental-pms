@@ -108,7 +108,7 @@ class ImapClient:
         return [name for name, _ in (_parse_list_row(row) for row in rows) if name]
 
     def _discover_all_mail(self) -> str:
-        """Locate the All Mail folder by its \All special-use flag.
+        r"""Locate the All Mail folder by its \All special-use flag.
 
         Falls back to INBOX, which loses archived mail but is better than
         failing outright.
