@@ -258,3 +258,54 @@ def test_real_parsed_events_fold_correctly():
     assert folded[0].status == "Cancelled"
     assert folded[0].guest_name == "Elodie Devriendt"
     assert folded[0].arrival == date(2026, 8, 14)
+
+
+# --- modifications that move the checkout ----------------------------------
+#
+# A modification email repeats the arrival date unchanged, so a moved checkout
+# is invisible in the email itself. The departure can only come from a fresh
+# iCal lookup, and the result has to overwrite what Notion already holds --
+# a stale departure would send the cleaning crew on the wrong day.
+
+def test_changed_departure_overwrites_the_stored_one():
+    page = existing_page(
+        "p1", "111", status="New", arrival="2026-09-01", departure="2026-09-15",
+        received="2026-06-11", raw="Booking.com - test (111, x)",
+    )
+    writer = FakeWriter({"111": page})
+    # Guest extended: same arrival, checkout moved from 15 to 20 September.
+    state = fold_events([
+        event("111", EventType.MODIFIED, date(2026, 9, 1), sent_at=date(2026, 8, 20),
+              departure=date(2026, 9, 20))
+    ])[0]
+    assert writer.upsert(state) == "updated"
+    patch = [b for m, _, b in writer.requests if m == "PATCH"][-1]
+    assert patch["properties"]["Departure"]["date"]["start"] == "2026-09-20"
+
+
+def test_shortened_stay_also_overwrites():
+    page = existing_page(
+        "p1", "111", status="New", arrival="2026-09-01", departure="2026-09-15",
+        received="2026-06-11", raw="Booking.com - test (111, x)",
+    )
+    writer = FakeWriter({"111": page})
+    state = fold_events([
+        event("111", EventType.MODIFIED, date(2026, 9, 1), sent_at=date(2026, 8, 20),
+              departure=date(2026, 9, 5))
+    ])[0]
+    writer.upsert(state)
+    patch = [b for m, _, b in writer.requests if m == "PATCH"][-1]
+    assert patch["properties"]["Departure"]["date"]["start"] == "2026-09-05"
+
+
+def test_unchanged_departure_is_not_rewritten():
+    page = existing_page(
+        "p1", "111", status="Modified", arrival="2026-09-01", departure="2026-09-15",
+        received="2026-06-11", raw="Booking.com - test (111, x)",
+    )
+    writer = FakeWriter({"111": page})
+    state = fold_events([
+        event("111", EventType.MODIFIED, date(2026, 9, 1), sent_at=date(2026, 6, 11),
+              departure=date(2026, 9, 15))
+    ])[0]
+    assert writer.upsert(state) == "unchanged"
