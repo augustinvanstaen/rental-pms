@@ -1,0 +1,52 @@
+name: Sync Booking.com to Notion
+
+on:
+  schedule:
+    # Every day at 06:15 UTC. Cron here is always UTC, so this shifts by an
+    # hour relative to Brussels time across DST changes.
+    - cron: "15 6 * * *"
+  workflow_dispatch:
+    inputs:
+      lookback_days:
+        description: "How many days of mail to scan"
+        required: false
+        default: "30"
+      parse_only:
+        description: "Parse and report only, no writes"
+        type: boolean
+        required: false
+        default: false
+
+concurrency:
+  # Never let a scheduled run and a manual run write to Notion at once.
+  group: booking-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Run tests
+        run: python -m pytest tests/ -q
+
+      - name: Sync
+        env:
+          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          NOTION_API_TOKEN: ${{ secrets.NOTION_API_TOKEN }}
+          NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
+          ICAL_URL: ${{ secrets.ICAL_URL }}
+          LOOKBACK_DAYS: ${{ inputs.lookback_days || '30' }}
+        run: |
+          python -m rental_pms.main ${{ inputs.parse_only && '--parse-only' || '' }}

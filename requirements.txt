@@ -1,0 +1,8 @@
+# No runtime dependencies.
+#
+# The parser, IMAP reader, iCal matcher and Notion writer all use only the
+# standard library. The iCal feed uses DATE-valued DTSTART/DTEND and nothing
+# else, and the Notion writer touches three REST endpoints -- in both cases a
+# library would have been more weight than the code it replaced.
+#
+# Keeping this empty means the scheduled job has nothing to resolve or pin.
